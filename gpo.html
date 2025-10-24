@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Comparador de Trades GPO</title>
+  <style>
+    :root{
+      --bg:#0d0f11;
+      --panel:#15171b;
+      --card:#0f1314;
+      --accent:#00bcd4;
+      --accent-2:#00e5ff;
+      --slot:#08c6d2;
+      --text:#e8f6f8;
+      --muted:rgba(255,255,255,0.45);
+      --green:#00ff80;
+      --red:#ff6b6b;
+      --fair:#9fbdd0;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: "Poppins", sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      min-height:100vh;
+      padding:18px 12px;
+    }
+
+    header{
+      width:100%;
+      max-width:1100px;
+      text-align:center;
+      margin-bottom:6px;
+    }
+    header h1{ margin:6px 0; color:var(--accent-2); font-size:24px; }
+    .logo{ width:120px; height:auto; opacity:.95; margin:6px auto 0; }
+
+    .trade-area{
+      width:100%;
+      max-width:1100px;
+      display:flex;
+      gap:30px;
+      justify-content:center;
+      align-items:flex-start;
+      margin-top:18px;
+      flex-wrap:wrap;
+    }
+
+    .trader{
+      background:var(--panel);
+      border-radius:12px;
+      padding:18px;
+      width:320px;
+      box-shadow:0 0 18px rgba(0,188,212,0.06), inset 0 0 6px rgba(0,0,0,0.2);
+      border:1px solid rgba(255,255,255,0.02);
+      text-align:center;
+    }
+    .trader h2{ color:var(--accent-2); margin:4px 0 8px; font-size:18px; }
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:12px;
+      justify-items:center;
+      margin:10px 0 6px;
+    }
+    .slot{
+      width:72px;
+      height:72px;
+      background:var(--slot);
+      border-radius:10px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      color:#000;
+      cursor:pointer;
+      user-select:none;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.5);
+      transition: transform .12s ease, background .12s;
+      text-align:center;
+      padding:6px;
+      font-size:14px;
+    }
+    .slot:hover{ transform: translateY(-4px); }
+    .slot .sub { display:block; font-size:11px; font-weight:600; color:#001; opacity:.95; margin-top:6px; }
+    .slot.selected{ background: linear-gradient(180deg,#ffbf4d,#ffa500); color:#000; }
+
+    .total{ margin-top:8px; font-weight:700; color:var(--green); }
+
+    .center-box{
+      width:360px;
+      background:var(--panel);
+      border-radius:12px;
+      padding:18px;
+      box-shadow:0 0 18px rgba(0,188,212,0.06);
+      text-align:center;
+      border:1px solid rgba(255,255,255,0.02);
+    }
+    .center-box h3{ color:var(--accent-2); margin:0 0 8px; font-size:20px; }
+    .dif{ color:var(--text); font-weight:600; font-size:16px; margin-bottom:8px; }
+    .dif .status { font-weight:900; margin-left:8px; }
+
+    /* Modal */
+    .modal-bg{
+      position:fixed;
+      left:0;right:0;top:0;bottom:0;
+      background:rgba(0,0,0,0.6);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:999;
+      padding:16px;
+    }
+    .modal{
+      width:100%;
+      max-width:920px;
+      max-height:80vh;
+      overflow:auto;
+      background:var(--card);
+      border-radius:10px;
+      padding:18px;
+      border:1px solid rgba(255,255,255,0.03);
+      box-shadow:0 10px 40px rgba(0,0,0,0.6);
+    }
+    .modal .top{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      margin-bottom:12px;
+    }
+    .modal input[type="search"]{
+      flex:1;
+      padding:10px 12px;
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,0.04);
+      background:#0b0d0e;
+      color:var(--text);
+      outline:none;
+    }
+    .modal .controls{ display:flex; gap:8px; align-items:center; }
+    .modal .btn{ padding:8px 10px; border-radius:8px; background:var(--accent); color:black; font-weight:700; cursor:pointer; border:none; }
+    .modal .btn.secondary{ background:transparent; color:var(--accent-2); border:1px solid rgba(0,188,212,0.08); }
+
+    /* category card + dropdown */
+    .category{
+      margin-bottom:12px;
+      background:#0b0f10;
+      border-radius:8px;
+      padding:8px 10px;
+      border:1px solid rgba(255,255,255,0.02);
+    }
+    .cat-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      cursor:pointer;
+      user-select:none;
+      padding:6px 4px;
+    }
+    .cat-head h4{ margin:0; color:var(--accent-2); font-size:15px; display:flex; gap:8px; align-items:center; }
+    .chev{ transition: transform .22s ease; color:var(--muted); font-weight:700; }
+    .cat-body{
+      overflow:hidden;
+      max-height:0;
+      transition: max-height .28s ease, opacity .22s ease;
+      opacity:0;
+      padding-top:0;
+    }
+    .cat-open .cat-body{ opacity:1; max-height:420px; padding-top:8px; }
+
+    .items-list{
+      display:grid;
+      grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+      gap:8px;
+    }
+    .item-card{
+      background:#0f1314;
+      border-radius:8px;
+      padding:8px 10px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      cursor:pointer;
+      border:1px solid rgba(255,255,255,0.02);
+      transition: transform .12s ease, background .12s;
+    }
+    .item-card:hover{ background:#131617; transform: translateY(-2px); }
+    .item-name{ font-size:14px; color:var(--text); font-weight:600; }
+    .item-val{ font-size:13px; color:var(--accent-2); font-weight:800; }
+
+    .small-muted{ font-size:12px; color:var(--muted); margin-top:6px; }
+
+    @media(max-width:920px){
+      .modal{ max-width:96vw; }
+      .trade-area{ gap:12px; }
+      .trader{ width:280px; }
+      .center-box{ width:320px; margin-top:6px; }
+    }
+    @media(max-width:640px){
+      .trader{ width:100%; max-width:360px; }
+      .center-box{ width:100%; max-width:360px; }
+      .trade-area{ flex-direction:column; align-items:center;}
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Comparador de Trades GPO</h1>
+    <img class="logo" src="https://via.placeholder.com/180x48?text=Logo+do+Jogo" alt="logo">
+  </header>
+
+  <main class="trade-area">
+    <section class="trader" id="gridGiveContainer">
+      <h2>Você dá</h2>
+      <div class="grid" id="gridGive"></div>
+      <div class="total" id="totalGive">Total: 0 pts</div>
+      <div class="small-muted">Clique no slot para escolher</div>
+    </section>
+
+    <aside class="center-box">
+      <h3>⚖️ Trade</h3>
+      <div class="dif" id="difText">Diferença de 0 pontos</div>
+      <div id="resultText" class="dif" style="font-size:15px;"></div>
+      <div style="margin-top:10px; font-size:13px; color:var(--muted)">Você dá (esq) · Você recebe (dir)</div>
+    </aside>
+
+    <section class="trader" id="gridReceiveContainer">
+      <h2>Você recebe</h2>
+      <div class="grid" id="gridReceive"></div>
+      <div class="total" id="totalReceive">Total: 0 pts</div>
+      <div class="small-muted">Clique no slot para escolher</div>
+    </section>
+  </main>
+
+  <div class="modal-bg" id="modalBg" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="top">
+        <input type="search" id="search" placeholder="Pesquisar item (nome ou valor)..." />
+        <div class="controls">
+          <button class="btn" id="removeBtn">Remover item</button>
+          <button class="btn secondary" id="closeBtn">Fechar</button>
+        </div>
+      </div>
+      <div id="countInfo" class="small-muted"></div>
+      <div id="itemsContainer"></div>
+    </div>
+  </div>
+
+  <script>
+/* ================
+   Usei sua lista fielmente
+   ================ */
+const rawByCategory = {
+  "🥭 FRUITS": `
+Buddha : 2.800
+Gold : 100
+Goro : 100
+Gura : 150
+Hie : 150
+Ito : 80
+Kage : 50
+Kira : 100
+Mera : 200
+Magu : 600
+Mochi : 7.000
+Ope : 2.000
+Paw : 50
+Pika : 4.500
+Ptero : 2.500
+Smoke : 100
+Tori : 3.500
+Venom : 4.200
+Yami : 50
+Yuki : 100
+Zushi : 150
+`.trim(),
+
+  "📦 ITEMS": `
+Myth Chest : 5.000
+Ase : 32.000
+Df Journal : 150
+Droot : 10
+Jester Box : 600
+Karoo : 75
+Kk Core : 100
+Leg Chest : 500
+Megalodon Tooth : 40
+Sea Core : 200
+Sp : 5
+Spare Bag : 100
+Spirit Colour : 150
+Token : 50
+`.trim(),
+
+  "🛥️ BOATS": `
+Coffin Boat : 600
+Cupid Boat : 50
+Flamingo Boat : 2.500
+Hoverboard : 500
+Striker : 600
+Thriller Ship : 300
+`.trim(),
+
+  "💎 SPECIALS": `
+Anomalized Mega Pow : 65.000
+All Mythical Fruits : 21.500
+Case : 130.000
+Blo Ase : 42.000
+Candy Cane : 80.000
+Elo Egg : 1.200
+P. Bag : 88.000
+P. Candy Cane : 500.000
+P. Firework Daggers : 125.000
+P. Firework Lancer : 300.000
+P. Firework Rocket Launcher : 45.000
+P. Inferno Rocket Blade : 275.000
+Valk (Og) : 15.000
+`.trim(),
+
+  "🧥 WEARABLES": `
+Azure Armor : 600
+Baal Cape : 90
+Black Bull : 600
+Blessed Exalted Qfit : 2.000
+Blessed Exalted Qwings : 22.000
+Blessed Scarf : 2.750
+Blessed Vanguard Fit : 400
+Coyote Outfit : 4.500
+Banana : 1.500
+Black Walk : 42.000
+Clown Head : 1.500
+Cupid Headband : 150
+Cupid Scarf : 300
+Cupid Vanguard Fit : 100
+Domingo Cape : 90
+Domingo Fit : 75
+Domingo Shades : 150
+Drums : 100
+Exalted Qfit : 300
+Exalted Qwings : 1.500
+Frostspire Hood : 300
+Golden Haori : 700
+Half Shround : 2.000
+Hawk Fit : 300
+Hawk Hat : 100
+Jester Fit : 45.000
+Jester Hat : 500
+Kumakawa Head : 1.400
+Law Cape : 25
+Law Fit : 50
+Law Hat : 25
+Megalodon Armor : 150
+Megalodon Helmet : 400
+Moria Fit : 25
+Moria Hat : 25
+BatSwarm : 600
+Moria Necklace : 100
+Musashi Fit : 25
+Musashi Hat : 25
+Nightfall Shround : 5.500
+Qfit : 2.500
+Qwings : 1.700
+Radiant Cape : 200
+Radiant Fit : 150
+Radiant Shades : 300
+Reshead : 3.000
+Resurrected Baal Fit : 300
+Roger Fit : 450
+Roger Hat : 100
+Rocky Pet : 150
+Ryuma Scarf : 300
+Sb Armor : 50
+Sb Mask : 100
+Sk Fit : 75
+Sk Hat : 150
+Sk Shades : 100
+Soul King Scarf : 27.000
+Sunken Armor : 150
+Sunken Helmet : 2.000
+Supreme Gift Box Armor : 100
+Supreme Gift Box Helmet : 100
+Toji Fit : 2.000
+Ten Tails : 1.000
+True Baal Guard : 800
+Yukio : 16.000
+Usamii Head : 800
+Zoranas Hat : 450
+Zoranas Robe : 450
+`.trim(),
+
+  "⚔️ WEAPONS": `
+Azure Great Sword : 600
+Bisento : 50
+Black Pitchfork : 50
+Blessed Cupid Bow : 2.500
+Blo Crimson Hammer : 1.500
+Blood Scythe : 200
+Boneshiver : 400
+Crab Cutless : 50
+Cupid Battleaxe : 100
+Cupid Bow : 100
+Cupid Wand : 150
+Baal Head : 1.500
+Elo Hammer : 1.200
+Festival Lancer : 300
+Festival Shield : 500
+Firework Daggers : 50
+Firework Lancer : 300
+Firework Rocket Launcher : 50
+Flower Sword : 600
+Flowers : 13.000
+Gauntlets : 150
+Golden Hook : 50
+Hollow Fang : 200
+Hollow Gs : 75
+Hollow Halberd : 150
+Gunblade : 300
+Iceborn Blade : 200
+Iceborn Dagger : 100
+Iceborn Katana : 300
+Iceborn Rapier : 200
+Inferno Rocket Blade : 300
+Isoh : 2.500
+Jester Scythe : 600
+Jitte : 200
+Kikoku : 9.500
+Mega Pow : 200
+Moria Scissors : 50
+Pipe : 150
+Pole : 50
+Raiui : 50
+Shusui : 100
+Snowcar Scepter : 2.000
+Soul Cane : 200
+Soul Guitar : 1.800
+Stark Guns : 1.700
+Sunken Anchor : 800
+Swordfish Rapier : 4.500
+Trident : 100
+Vera Whip : 50
+Violin : 100
+Wender : 22.000
+Yoru : 4.200
+`.trim()
+};
+
+/* ===== parse helper ===== */
+function parseLines(raw){
+  const lines = raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  return lines.map(l=>{
+    const parts = l.split(":");
+    const name = parts[0].trim();
+    const rawVal = parts.slice(1).join(":").trim();
+    const cleaned = rawVal.replace(/\./g,"").replace(/,/g,".");
+    let value = parseFloat(cleaned);
+    if(Number.isNaN(value)) value = 0;
+    return { name, value: Math.round(value) };
+  });
+}
+
+/* ===== build ITEMS and categorized object ===== */
+const CATEGORIES_ORDER = ["🥭 FRUITS","📦 ITEMS","🛥️ BOATS","💎 SPECIALS","🧥 WEARABLES","⚔️ WEAPONS"];
+const categorized = {};
+let ITEMS = [];
+for(const key of CATEGORIES_ORDER){
+  const parsed = parseLines(rawByCategory[key] || "");
+  categorized[key] = parsed;
+  ITEMS = ITEMS.concat(parsed);
+}
+
+/* helpers UI */
+function formatPts(n){
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/* modal elements */
+const itemsContainer = document.getElementById("itemsContainer");
+const modalBg = document.getElementById("modalBg");
+const searchInput = document.getElementById("search");
+const closeBtn = document.getElementById("closeBtn");
+const removeBtn = document.getElementById("removeBtn");
+const countInfo = document.getElementById("countInfo");
+let activeSlot = null;
+
+/* render categories (dropdown cards) */
+function renderCategories(obj){
+  itemsContainer.innerHTML = "";
+  let totalCount = 0;
+  for(const key of CATEGORIES_ORDER){
+    const list = obj[key] || [];
+    if(!list || list.length===0) continue;
+    totalCount += list.length;
+    const card = document.createElement("div");
+    card.className = "category";
+    const head = document.createElement("div");
+    head.className = "cat-head";
+    head.innerHTML = `<h4>${key} <span style="font-size:12px;color:var(--muted);margin-left:6px">(${list.length})</span></h4><div class="chev">▸</div>`;
+    card.appendChild(head);
+
+    const body = document.createElement("div");
+    body.className = "cat-body";
+    const grid = document.createElement("div");
+    grid.className = "items-list";
+
+    for(const it of list){
+      const itemCard = document.createElement("div");
+      itemCard.className = "item-card";
+      itemCard.innerHTML = `<div class="item-name">${it.name}</div><div class="item-val">${formatPts(it.value)} pts</div>`;
+      itemCard.addEventListener("click", ()=> selectItem(it));
+      grid.appendChild(itemCard);
+    }
+
+    body.appendChild(grid);
+    card.appendChild(body);
+
+    // toggle
+    head.addEventListener("click", ()=>{
+      const opened = card.classList.toggle("cat-open");
+      const chev = head.querySelector(".chev");
+      chev.style.transform = opened ? "rotate(90deg)" : "rotate(0deg)";
+    });
+
+    itemsContainer.appendChild(card);
+  }
+  countInfo.textContent = totalCount + " itens";
+}
+
+/* open modal for a slot */
+function openModalForSlot(slotEl){
+  activeSlot = slotEl;
+  searchInput.value = "";
+  renderCategories(categorized);
+  modalBg.style.display = "flex";
+  modalBg.setAttribute("aria-hidden","false");
+}
+
+/* close modal */
+function closeModal(){
+  modalBg.style.display = "none";
+  modalBg.setAttribute("aria-hidden","true");
+  activeSlot = null;
+}
+closeBtn.addEventListener("click", closeModal);
+modalBg.addEventListener("click", (e)=>{ if(e.target===modalBg) closeModal(); });
+
+/* remove item from active slot */
+removeBtn.addEventListener("click", ()=>{
+  if(!activeSlot) return;
+  delete activeSlot.dataset.value;
+  delete activeSlot.dataset.name;
+  activeSlot.classList.remove("selected");
+  activeSlot.innerHTML = "+";
+  atualizarTotais();
+  closeModal();
+});
+
+/* create 3x3 slots per side */
+const gridGive = document.getElementById("gridGive");
+const gridReceive = document.getElementById("gridReceive");
+const SLOTS = 9;
+for(let i=0;i<SLOTS;i++){
+  const slotG = document.createElement("div");
+  slotG.className="slot";
+  slotG.innerHTML = "+";
+  slotG.addEventListener("click", ()=> openModalForSlot(slotG));
+  gridGive.appendChild(slotG);
+
+  const slotR = document.createElement("div");
+  slotR.className="slot";
+  slotR.innerHTML = "+";
+  slotR.addEventListener("click", ()=> openModalForSlot(slotR));
+  gridReceive.appendChild(slotR);
+}
+
+/* select item into slot */
+function selectItem(item){
+  if(!activeSlot) return;
+  activeSlot.classList.add("selected");
+  activeSlot.dataset.value = item.value;
+  activeSlot.dataset.name = item.name;
+  const short = item.name.length>14 ? item.name.slice(0,14)+"…" : item.name;
+  activeSlot.innerHTML = `${short}<span class="sub">${formatPts(item.value)}</span>`;
+  atualizarTotais();
+  closeModal();
+}
+
+/* search filter */
+searchInput.addEventListener("input", ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if(!q){
+    renderCategories(categorized);
+    return;
+  }
+  // match name or value
+  const filtered = ITEMS.filter(it => it.name.toLowerCase().includes(q) || it.value.toString().includes(q));
+  const fake = { "🔍 Resultados": filtered };
+  // Render fake results as single category (keeps dropdown styling)
+  itemsContainer.innerHTML = "";
+  const card = document.createElement("div");
+  card.className = "category cat-open";
+  const head = document.createElement("div");
+  head.className = "cat-head";
+  head.innerHTML = `<h4>🔍 Resultados (${filtered.length})</h4><div class="chev">▸</div>`;
+  card.appendChild(head);
+  const body = document.createElement("div");
+  body.className = "cat-body";
+  body.style.opacity = "1";
+  body.style.maxHeight = "420px";
+  const grid = document.createElement("div");
+  grid.className = "items-list";
+  for(const it of filtered){
+    const itemCard = document.createElement("div");
+    itemCard.className = "item-card";
+    itemCard.innerHTML = `<div class="item-name">${it.name}</div><div class="item-val">${formatPts(it.value)} pts</div>`;
+    itemCard.addEventListener("click", ()=> selectItem(it));
+    grid.appendChild(itemCard);
+  }
+  body.appendChild(grid);
+  card.appendChild(body);
+  itemsContainer.appendChild(card);
+  countInfo.textContent = filtered.length + " itens";
+});
+
+/* totals & result */
+function atualizarTotais(){
+  const totalGive = [...document.querySelectorAll('#gridGive .slot.selected')]
+    .reduce((acc,el) => acc + (parseInt(el.dataset.value||0)),0);
+  const totalReceive = [...document.querySelectorAll('#gridReceive .slot.selected')]
+    .reduce((acc,el) => acc + (parseInt(el.dataset.value||0)),0);
+
+  document.getElementById('totalGive').textContent = `Total: ${formatPts(totalGive)} pts`;
+  document.getElementById('totalReceive').textContent = `Total: ${formatPts(totalReceive)} pts`;
+
+  const lucro = totalReceive - totalGive;
+  const difEl = document.getElementById('difText');
+  const resultEl = document.getElementById('resultText');
+
+  if(lucro === 0){
+    difEl.textContent = `Diferença de 0 pontos`;
+    resultEl.innerHTML = `<span style="color:var(--fair)">Trade justo — Fair Trade</span>`;
+  } else if(lucro > 0){
+    difEl.textContent = `Você ganha ${formatPts(lucro)} pontos`;
+    resultEl.innerHTML = `<span style="color:var(--green); font-weight:900">W</span>`;
+  } else {
+    difEl.textContent = `Você perde ${formatPts(Math.abs(lucro))} pontos`;
+    resultEl.innerHTML = `<span style="color:var(--red); font-weight:900">L</span>`;
+  }
+}
+
+/* init */
+renderCategories(categorized);
+atualizarTotais();
+
+/* expose for debug */
+window._ITEMS = ITEMS;
+window._CATEG = categorized;
+  </script>
+</body>
+</html>
