@@ -1,3 +1,3 @@
-Source commit: e53e2c77e7c2c51bbc0728a51ca6e584f9e29a16
+Source commit: c89d08eac2adbc0a7b9f92859202a5dc1d64d6f4
 Built and install-tested on Windows. Python and Qt runtimes included.
 Unsigned installer.
