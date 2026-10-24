@@ -1,0 +1,3 @@
+7d9981b54f8494a62feea2ed1f38c180215001e07ed423baffdc0af7fd40cb34  win-x64/FiveM Deep Clean Manager.exe
+770d6e73c9f915ec081345f8099dea2119be2351e24d800dbfbafa18702e19f9  FiveM-Deep-Clean-Manager-source.zip
+ad87a76bd68dcb8e2fcab11b7c904ad0b25fc34ea23e7c54318dd8a2aaa8c1bf  FiveM-Deep-Clean-Manager-win-x64.zip
