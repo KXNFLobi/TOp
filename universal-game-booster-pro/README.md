@@ -2,6 +2,16 @@
 
 Aplicativo desktop em **Python 3.12 + PySide6** para Windows 10/11 x64. Monitoramento real, perfis por jogo, solicitação de fechamento normal de aplicativos autorizados e um único ajuste opcional de energia com recuperação persistente. Não promete FPS, não injeta código em jogos e não faz limpeza agressiva de memória.
 
+## Distribuir para clientes: sem Python
+
+O cliente recebe **UniversalGameBoosterPro-Setup.exe**, e não o ZIP do código. O instalador inclui o aplicativo, Python embutido, Qt/PySide6 e psutil; não requer `py`, `pip`, Python instalado ou acesso à Internet para instalar/executar. Instala somente para o usuário atual, cria atalho no menu Iniciar e oferece atalho na área de trabalho. Não ativa autostart nem muda planos de energia durante a instalação.
+
+O workflow Windows compila o bundle e o instalador Inno Setup, verifica as DLLs dos runtimes, instala em uma pasta temporária, abre a interface empacotada, solicita fechamento normal e testa a desinstalação. Somente depois publica o Setup em `downloads/UniversalGameBoosterPro-Setup.exe` na branch `fivem-deep-clean-manager`, com SHA-256 e commit de origem. Se a política do repositório impedir o commit automático, o instalador continua disponível como artefato **UniversalGameBoosterPro-Setup** da execução bem-sucedida em Actions.
+
+Para distribuição pública, assine o Setup e o executável com um certificado de assinatura de código de sua organização. Este projeto não inventa assinatura de editor. Um instalador não assinado pode receber alertas do Windows; não é necessário nem recomendado desativar proteções de segurança.
+
+Para compilar localmente, use `build.cmd` em um PC de desenvolvimento com Python 3.12 e Inno Setup 6. **Só a máquina de compilação precisa dessas ferramentas; os clientes não.** O bundle portátil também funciona sem Python, desde que toda a pasta de saída seja distribuída junto.
+
 ## Baixar e executar
 
 O código fica nesta pasta, separado do FiveM Deep Clean Manager. O ZIP do código está em `downloads/Universal-Game-Booster-Pro-source.zip` na raiz do repositório.

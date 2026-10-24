@@ -11,6 +11,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: booster-windows-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-latest
@@ -29,8 +32,93 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
       - run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name UniversalGameBoosterPro main.py
+      - name: Verify bundled Python runtime
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'dist/UniversalGameBoosterPro/UniversalGameBoosterPro.exe')) { throw 'Executable missing' }
+          if (!(Get-ChildItem 'dist/UniversalGameBoosterPro' -Filter 'python3*.dll' -Recurse)) { throw 'Bundled Python runtime missing' }
+          if (!(Get-ChildItem 'dist/UniversalGameBoosterPro' -Filter 'Qt6Widgets.dll' -Recurse)) { throw 'Bundled Qt runtime missing' }
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $compiler)) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
+          & $compiler 'installer/UniversalGameBoosterPro.iss'
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - name: Test silent install and packaged GUI
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'BoosterInstallSmoke'
+          $setup = Resolve-Path 'dist/installer/UniversalGameBoosterPro-Setup.exe'
+          $log = Join-Path $env:RUNNER_TEMP 'booster-setup.log'
+          $installation = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$target", "/LOG=$log") -Wait -PassThru
+          if ($installation.ExitCode -ne 0) { throw "Setup failed: $($installation.ExitCode)" }
+          $executable = Join-Path $target 'UniversalGameBoosterPro.exe'
+          if (!(Test-Path $executable)) { throw 'Installed executable missing' }
+          if (!(Get-ChildItem $target -Filter 'python3*.dll' -Recurse)) { throw 'Installed runtime missing' }
+          $launcher = Start-Process -FilePath $executable -PassThru
+          $deadline = (Get-Date).AddSeconds(60)
+          $windowFound = $false
+          do {
+            Start-Sleep -Milliseconds 500
+            $gui = Get-Process -Name 'UniversalGameBoosterPro' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $executable -and $_.MainWindowTitle -eq 'Universal Game Booster Pro' } | Select-Object -First 1
+            if ($gui) { $windowFound = $true; break }
+            $launcher.Refresh()
+            if ($launcher.HasExited -and $launcher.ExitCode -ne 0) { throw "Packaged launcher exited early: $($launcher.ExitCode)" }
+          } while ((Get-Date) -lt $deadline)
+          if (!$windowFound) { throw 'Packaged GUI did not show its main window' }
+          if (!$gui.CloseMainWindow()) { throw 'Could not request normal close of smoke-test application' }
+          if (!$gui.WaitForExit(30000)) { throw 'Packaged GUI did not close normally' }
+          if ($gui.ExitCode -ne 0) { throw "GUI exit code: $($gui.ExitCode)" }
+          $uninstall = Start-Process -FilePath (Join-Path $target 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw 'Uninstall smoke test failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: UniversalGameBoosterPro-Windows-x64
           path: universal-game-booster-pro/dist/UniversalGameBoosterPro/
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UniversalGameBoosterPro-Setup
+          path: universal-game-booster-pro/dist/installer/UniversalGameBoosterPro-Setup.exe
+          if-no-files-found: error
+  publish-installer:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/fivem-deep-clean-manager'
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: UniversalGameBoosterPro-Setup
+          path: downloads
+      - name: Save verified installer in downloads
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, os
+          p = Path('downloads/UniversalGameBoosterPro-Setup.exe')
+          if p.stat().st_size > 95 * 1024 * 1024:
+              raise SystemExit('Installer too large for repository; use the Actions artifact')
+          Path('downloads/UniversalGameBoosterPro-Setup-SHA256.txt').write_text(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n')
+          Path('downloads/UniversalGameBoosterPro-Setup-BUILD.txt').write_text('Source commit: ' + os.environ['SOURCE_COMMIT'] + '\nBuilt and install-tested on Windows. Python and Qt runtimes included.\nUnsigned installer.\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add downloads/UniversalGameBoosterPro-Setup.exe downloads/UniversalGameBoosterPro-Setup-SHA256.txt downloads/UniversalGameBoosterPro-Setup-BUILD.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish tested Universal Game Booster Pro installer [skip ci]"
+            git push origin "HEAD:refs/heads/$BRANCH_NAME"
+          fi

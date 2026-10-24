@@ -22,3 +22,10 @@ O novo aplicativo fica separado em `universal-game-booster-pro/`. Baixe **Univer
 Para gerar o executável sem Python no PC de destino, abra **Actions → Universal Game Booster Pro - Windows**, selecione uma execução concluída da branch `fivem-deep-clean-manager` e baixe o artefato **UniversalGameBoosterPro-Windows-x64**. A geração ocorre no runner Windows, não neste ambiente Linux; confira o status da execução antes de procurar o artefato.
 
 O modo de simulação vem ligado e os processos desconhecidos ficam protegidos. Não há promessa de ganho de FPS nem limpeza agressiva de RAM.
+
+
+### Instalador para clientes — não exige Python
+
+Use **UniversalGameBoosterPro-Setup.exe** após a conclusão do workflow Windows. O instalador contém os runtimes e instala o aplicativo para o usuário atual. O ZIP `Universal-Game-Booster-Pro-source.zip` é para desenvolvimento, não para entregar a clientes.
+
+A publicação automática do Setup só ocorre depois de compilar, verificar os runtimes e testar instalação, abertura, fechamento normal e desinstalação em Windows. Confira o arquivo `UniversalGameBoosterPro-Setup-BUILD.txt` para o commit de origem e o SHA-256 no arquivo correspondente.

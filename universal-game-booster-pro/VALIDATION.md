@@ -17,3 +17,10 @@ A confirmar no Windows 10/11:
 - Entrada opt-in de inicialização automática e empacotamento PyInstaller no runner Windows.
 
 O workflow foi preparado para executar os testes e empacotar no Windows. A execução ou publicação de um artefato no GitHub Actions não é confirmada por este arquivo. Um executável Windows não foi produzido na máquina Linux. Não há promessa de aumento de FPS.
+
+
+## Distribuição sem Python instalado
+
+A execução Windows anterior foi confirmada como concluída com sucesso na página do GitHub Actions: https://github.com/KXNFLobi/TOp/actions/runs/40127049949 . Isso confirma os testes e o empacotamento portátil daquela versão; não comprova o novo instalador.
+
+O instalador Inno Setup e o workflow atualizado adicionam verificação dos runtimes, instalação silenciosa de teste, abertura da janela empacotada, fechamento normal e desinstalação. A publicação automática do Setup depende de esses passos passarem e do token do workflow poder escrever na branch. Consulte o arquivo BUILD gerado junto do instalador para identificar a compilação publicada.
