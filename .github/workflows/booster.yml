@@ -1,0 +1,36 @@
+name: Universal Game Booster Pro - Windows
+on:
+  push:
+    paths:
+      - 'universal-game-booster-pro/**'
+      - '.github/workflows/booster.yml'
+  pull_request:
+    paths:
+      - 'universal-game-booster-pro/**'
+      - '.github/workflows/booster.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: universal-game-booster-pro
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: 'universal-game-booster-pro/requirements*.txt'
+      - run: python -m pip install -r requirements-build.txt
+      - run: python -m unittest discover -s tests -v
+        env:
+          QT_QPA_PLATFORM: offscreen
+      - run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name UniversalGameBoosterPro main.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UniversalGameBoosterPro-Windows-x64
+          path: universal-game-booster-pro/dist/UniversalGameBoosterPro/
+          if-no-files-found: error

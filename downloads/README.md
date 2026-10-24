@@ -13,3 +13,12 @@ O executável não tem assinatura de código. A compilação cruzada e 45 testes
 Na versão 1.1.0, a caixa de seleção de programas, a lista aberta e sua barra de rolagem usam fundo escuro. Feche o executável antigo e extraia o ZIP atualizado em uma nova pasta antes de abrir.
 
 Na versão 1.1.0, use **Buscar no PC inteiro**, com o nome **Loard**, para procurar candidatos sem informar a pasta. Depois reconheça um arquivo na janela de revisão para analisar cópias idênticas e componentes relacionados. Nenhuma exclusão é autorizada só pelo nome. A busca exclui áreas protegidas e inacessíveis e não apaga históricos de execução ou auditoria.
+
+
+## Universal Game Booster Pro (Python / PySide6)
+
+O novo aplicativo fica separado em `universal-game-booster-pro/`. Baixe **Universal-Game-Booster-Pro-source.zip**, extraia, instale Python 3.12 e execute `run.cmd` (a primeira execução instala as dependências). Consulte o README dentro do ZIP.
+
+Para gerar o executável sem Python no PC de destino, abra **Actions → Universal Game Booster Pro - Windows**, selecione uma execução concluída da branch `fivem-deep-clean-manager` e baixe o artefato **UniversalGameBoosterPro-Windows-x64**. A geração ocorre no runner Windows, não neste ambiente Linux; confira o status da execução antes de procurar o artefato.
+
+O modo de simulação vem ligado e os processos desconhecidos ficam protegidos. Não há promessa de ganho de FPS nem limpeza agressiva de RAM.
