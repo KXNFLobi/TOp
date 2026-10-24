@@ -25,3 +25,7 @@ Ambiente de execução: Linux x64, SDK .NET 8.0.426. Compilação cruzada para W
 - Cache do FiveM e delegação de integridade ao launcher oficial.
 
 A geração do executável não certifica essas integrações. A distribuição pública deve ocorrer após teste em VM Windows descartável e assinatura de código. Não foi executada limpeza em um computador Windows real nesta sessão. O executável é distribuído sem assinatura de código.
+
+## Atualização visual 1.0.1
+
+Templates escuros explícitos adicionados ao ComboBox, itens e barra de rolagem da lista de programas. Publicação cruzada Windows x64 autocontida concluída sem erros ou avisos. A alteração é visual; os 30 testes registrados acima correspondem à lógica de segurança, que não foi alterada. A aparência atualizada ainda requer conferência no Windows.

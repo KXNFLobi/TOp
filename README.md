@@ -2,6 +2,8 @@
 
 Aplicativo de manutenção para **Windows 10/11 x64**, em **C# / .NET 8 / WPF**. Interface em português, tema preto e azul, revisão dos componentes e autorização explícita antes da remoção. O arquivo original `gpo.html` permanece independente e inalterado.
 
+Versão **1.0.1**: seletor de programas, itens, seleção e barra de rolagem da lista usam templates escuros próprios, independentemente do tema claro do Windows.
+
 ## Compilar e gerar o executável
 
 No Windows, instale o **SDK .NET 8** ou Visual Studio 2022 com a carga de trabalho **Desenvolvimento para desktop com .NET**. Abra `FiveMDeepCleanManager.sln` ou execute, na raiz deste repositório:
