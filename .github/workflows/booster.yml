@@ -51,30 +51,38 @@ jobs:
       - name: Test silent install and packaged GUI
         shell: pwsh
         run: |
-          $target = Join-Path $env:RUNNER_TEMP 'BoosterInstallSmoke'
-          $setup = Resolve-Path 'dist/installer/UniversalGameBoosterPro-Setup.exe'
-          $log = Join-Path $env:RUNNER_TEMP 'booster-setup.log'
-          $installation = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$target", "/LOG=$log") -Wait -PassThru
-          if ($installation.ExitCode -ne 0) { throw "Setup failed: $($installation.ExitCode)" }
-          $executable = Join-Path $target 'UniversalGameBoosterPro.exe'
-          if (!(Test-Path $executable)) { throw 'Installed executable missing' }
-          if (!(Get-ChildItem $target -Filter 'python3*.dll' -Recurse)) { throw 'Installed runtime missing' }
-          $launcher = Start-Process -FilePath $executable -PassThru
-          $deadline = (Get-Date).AddSeconds(60)
-          $windowFound = $false
-          do {
-            Start-Sleep -Milliseconds 500
-            $gui = Get-Process -Name 'UniversalGameBoosterPro' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $executable -and $_.MainWindowTitle -eq 'Universal Game Booster Pro' } | Select-Object -First 1
-            if ($gui) { $windowFound = $true; break }
-            $launcher.Refresh()
-            if ($launcher.HasExited -and $launcher.ExitCode -ne 0) { throw "Packaged launcher exited early: $($launcher.ExitCode)" }
-          } while ((Get-Date) -lt $deadline)
-          if (!$windowFound) { throw 'Packaged GUI did not show its main window' }
-          if (!$gui.CloseMainWindow()) { throw 'Could not request normal close of smoke-test application' }
-          if (!$gui.WaitForExit(30000)) { throw 'Packaged GUI did not close normally' }
-          if ($gui.ExitCode -ne 0) { throw "GUI exit code: $($gui.ExitCode)" }
-          $uninstall = Start-Process -FilePath (Join-Path $target 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) { throw 'Uninstall smoke test failed' }
+          try {
+            $target = Join-Path $env:RUNNER_TEMP 'BoosterInstallSmoke'
+            $setup = Resolve-Path 'dist/installer/UniversalGameBoosterPro-Setup.exe'
+            $log = Join-Path $env:RUNNER_TEMP 'booster-setup.log'
+            $installation = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$target", "/LOG=$log") -Wait -PassThru
+            if ($installation.ExitCode -ne 0) { throw "Setup failed: $($installation.ExitCode)" }
+            $executable = Join-Path $target 'UniversalGameBoosterPro.exe'
+            if (!(Test-Path $executable)) { throw 'Installed executable missing' }
+            if (!(Get-ChildItem $target -Filter 'python3*.dll' -Recurse)) { throw 'Installed runtime missing' }
+            $launcher = Start-Process -FilePath $executable -PassThru
+            $deadline = (Get-Date).AddSeconds(60)
+            $windowFound = $false
+            do {
+              Start-Sleep -Milliseconds 500
+              $gui = Get-Process -Name 'UniversalGameBoosterPro' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $executable -and $_.MainWindowTitle -eq 'Universal Game Booster Pro' } | Select-Object -First 1
+              if ($gui) { $windowFound = $true; break }
+              $launcher.Refresh()
+              if ($launcher.HasExited -and $launcher.ExitCode -ne 0) { throw "Packaged launcher exited early: $($launcher.ExitCode)" }
+            } while ((Get-Date) -lt $deadline)
+            if (!$windowFound) { throw 'Packaged GUI did not show its main window' }
+            $null = $gui.Handle
+            if (!$gui.CloseMainWindow()) { throw 'Could not request normal close of smoke-test application' }
+            if (!$gui.WaitForExit(30000)) { throw 'Packaged GUI did not close normally' }
+            if ($gui.ExitCode -ne 0) { throw "GUI exit code: $($gui.ExitCode)" }
+            $uninstall = Start-Process -FilePath (Join-Path $target 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
+            if ($uninstall.ExitCode -ne 0) { throw 'Uninstall smoke test failed' }
+          } catch {
+            $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Installer runtime validation::$message"
+            if ($log -and (Test-Path $log)) { Get-Content $log -Tail 20 }
+            throw
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: UniversalGameBoosterPro-Windows-x64
