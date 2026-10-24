@@ -56,7 +56,11 @@ class CoreTests(unittest.TestCase):
             tree=ast.parse(path.read_text())
             for node in ast.walk(tree):
                 if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute):
-                    self.assertNotIn(node.func.attr,{"kill","terminate","suspend"},str(path))
+                    if node.func.attr == "kill" and path.name == "fps.py":
+                        # The sole exception is cleanup of the exact PresentMon Popen handle owned by this capture.
+                        self.assertEqual(ast.unparse(node.func.value), "self.process")
+                    else:
+                        self.assertNotIn(node.func.attr,{"kill","terminate","suspend"},str(path))
     def test_epic_manifest_discovers_real_executable_only(self):
         data=self.root/"data";manifests=data/"Epic/EpicGamesLauncher/Data/Manifests";manifests.mkdir(parents=True)
         install=self.root/"game";install.mkdir();(install/"Test.exe").write_bytes(b"fixture")

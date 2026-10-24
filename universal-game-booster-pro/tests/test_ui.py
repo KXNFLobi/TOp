@@ -11,6 +11,7 @@ from booster.ui import MainWindow, STYLE
 from booster.state import Store, canonical
 from booster.safety import ProcessRow, Decision
 from booster.monitor import metrics
+from booster.fps import FpsSample
 
 class UiTests(unittest.TestCase):
     @classmethod
@@ -35,6 +36,16 @@ class UiTests(unittest.TestCase):
     def test_game_selection_survives_refresh(self):
         self.window.store.data["games"]=[{"name":"Any Game","exe":self.row.exe}];self.window.render_games();self.window.games.setCurrentCell(0,1)
         self.window.render_games();self.assertEqual(self.window.selected_game()["name"],"Any Game")
+    def test_fps_target_is_the_registered_running_game(self):
+        self.window.store.data["games"]=[{"name":"Any Game","exe":self.row.exe}]
+        self.window.refresh_fps_targets()
+        self.assertEqual(self.window.fps_targets.currentData().pid,self.row.pid)
+    def test_fps_card_never_keeps_a_stale_value(self):
+        self.window.fps_updated(FpsSample(60,16.666,120,"A","Measured fixture"))
+        self.assertIn("60.0",self.window.cards["FPS"].text())
+        self.window.fps_updated(FpsSample(None,None,0,"","No recent frames"))
+        self.assertNotIn("60.0",self.window.cards["FPS"].text())
+        self.assertIn("Indisponível",self.window.cards["FPS"].text())
     def test_simulation_never_requests_close_or_power(self):
         self.window.decisions={123:Decision(True,"fixture only")};self.window.store.profile("Global")["close"]=[canonical(self.row.exe)]
         with patch("booster.ui.Preview.exec",return_value=QDialog.DialogCode.Accepted),patch("booster.ui.request_close") as close,patch.object(self.window.power,"apply") as power:

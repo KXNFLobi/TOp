@@ -24,3 +24,10 @@ O workflow foi preparado para executar os testes e empacotar no Windows. A execu
 A execução Windows anterior foi confirmada como concluída com sucesso na página do GitHub Actions: https://github.com/KXNFLobi/TOp/actions/runs/40127049949 . Isso confirma os testes e o empacotamento portátil daquela versão; não comprova o novo instalador.
 
 O instalador Inno Setup e o workflow atualizado adicionam verificação dos runtimes, instalação silenciosa de teste, abertura da janela empacotada, fechamento normal e desinstalação. A publicação automática do Setup depende de esses passos passarem e do token do workflow poder escrever na branch. Consulte o arquivo BUILD gerado junto do instalador para identificar a compilação publicada.
+
+
+## FPS 1.1.0
+
+A suíte acrescenta validações de PID, separação de swapchains, média ponderada dos intervalos de apresentação, expiração de leitura, rejeição de métricas inválidas, integridade do binário oficial e encerramento restrito ao handle do coletor particular. A interface é testada para não manter um FPS antigo quando a fonte deixa de fornecer quadros.
+
+O workflow Windows agora compila uma aplicação gráfica Direct3D11 WARP de teste, com duração limitada a 15 segundos, captura eventos ETW reais com PresentMon e exige FPS positivo com pelo menos dez intervalos. Depois de parar a captura, exige que a aplicação gráfica continue aberta e aguarda sua saída natural. O instalador só é publicado se esse teste e os testes de instalação/interface/desinstalação passarem. A execução deste novo teste ainda deve ser confirmada no GitHub; compatibilidade de cada jogo/anticheat real continua dependente do ambiente.

@@ -29,7 +29,7 @@ py -3.12 -m venv .venv
 # Compilar no Windows:
 .venv\Scripts\python -m pip install -r requirements-build.txt
 .venv\Scripts\python -m unittest discover -s tests -v
-.venv\Scripts\python -m PyInstaller --noconfirm --clean --onedir --windowed --name UniversalGameBoosterPro main.py
+.venv\Scripts\python -m PyInstaller --noconfirm --clean --onedir --windowed --name UniversalGameBoosterPro --add-binary "vendor/PresentMon/PresentMon.exe;vendor/PresentMon" --add-data "vendor/PresentMon/LICENSE.txt;vendor/PresentMon" --add-data "vendor/PresentMon/ORIGIN.json;vendor/PresentMon" main.py
 ```
 
 PyInstaller **não compila executáveis Windows a partir do Linux**. A interface e o modo de monitoramento podem ser testados no Linux; ações de fechamento, energia e inicialização automática ficam indisponíveis nessa plataforma.
@@ -55,7 +55,7 @@ O inventário mostra processos acessíveis e também entradas inacessíveis como
 
 A lista inicial contempla Chrome, Edge, Firefox, Brave, Spotify, Discord, Telegram e WhatsApp **apenas quando a assinatura, a edição instalada e as demais condições forem reconhecidas**. Ausência de assinatura, editor diferente, aplicação UWP/sem janela ou acesso insuficiente mantêm proteção. Não se permite transformar arbitrariamente um processo desconhecido em processo seguro. Versões adicionais exigem revisão da política em `booster/safety.py`.
 
-Processos são revalidados por PID, horário de criação, executável, usuário, serviço, criticidade, editor e HWND antes da solicitação. Não se usa `kill`, `terminate`, suspensão, manipulação de memória de outro processo ou fechamento de árvores. A lista Manter é respeitada pela seleção das ações. Jogos desconhecidos permanecem protegidos porque não pertencem à allowlist de aplicativos desktop assinados.
+Processos são revalidados por PID, horário de criação, executável, usuário, serviço, criticidade, editor e HWND antes da solicitação. Não se usa `kill`, `terminate`, suspensão, manipulação de memória de outro processo ou fechamento de árvores para fechar aplicativos do usuário. A única exceção de encerramento de emergência é o coletor PresentMon particular do próprio gerenciador, sem tocar no jogo. A lista Manter é respeitada pela seleção das ações. Jogos desconhecidos permanecem protegidos porque não pertencem à allowlist de aplicativos desktop assinados.
 
 Essas verificações são barreiras conservadoras, não uma certificação de um sistema já comprometido. Não é um antivírus ou ferramenta de remoção de cheats.
 
@@ -75,6 +75,23 @@ O GUID original é persistido **antes** da alteração. O plano é restaurado qu
 
 A restauração automática não substitui um plano escolhido posteriormente fora do programa; nesse caso, a recuperação permanece salva e o usuário pode restaurar explicitamente. Se a restauração falhar na saída, é possível sair mantendo a recuperação para a próxima sessão. Alto Desempenho pode aumentar consumo e temperatura e não garante melhora. Fechar aplicativos é uma ação que não pode recuperar trabalho perdido; o botão Restaurar não reabre suas sessões.
 
+## FPS real no painel — versão 1.1.0
+
+O instalador inclui o **PresentMon Console 2.3.0 oficial**, licenciado sob MIT, com versão e SHA-256 fixados. Não é preciso instalar outra ferramenta ou Python no computador do cliente. O FPS aparece no próprio aplicativo; não é um overlay injetado no jogo.
+
+1. Abra o jogo. Na linha **Jogo para FPS**, selecione seu processo gráfico (por exemplo, `FiveM_b..._GTAProcess.exe`, e não apenas o launcher). Jogos comuns aparecem pelo nome do processo; outros jogos podem ser cadastrados em **MEUS JOGOS** pelo executável.
+2. Clique em **Mostrar FPS**. A captura lê eventos ETW do Windows, filtrados pelo PID selecionado, e confirma a identidade do processo por horário de criação e caminho. Não modifica arquivos ou memória do jogo.
+3. Se faltar permissão ETW, o aplicativo oferece reabrir como administrador mediante autorização UAC. Após a reabertura, selecione o jogo e clique novamente em Mostrar FPS. O programa não altera grupos, serviços, anticheat nem permissões do Windows. A captura também pode funcionar sem elevação para membros habilitados de **Performance Log Users**, conforme requisitos oficiais do PresentMon.
+4. **Parar FPS** encerra somente a sessão/coletor particular desta captura. O jogo permanece aberto. A captura também para quando o processo escolhido termina ou o gerenciador fecha.
+
+O valor é a **taxa de apresentação da aplicação**, calculada a partir de `msBetweenPresents`: 1.000 × quantidade de intervalos / soma dos intervalos, em uma janela móvel de dois segundos. Havendo múltiplas swapchains, usa a dominante em quantidade de quadros recentes; não soma suas taxas. Não é uma estimativa por CPU/GPU, não é necessariamente igual ao contador interno do jogo, não representa a taxa física do monitor nem identifica separadamente quadros gerados por tecnologias de frame generation.
+
+Sem frames recentes por três segundos, formato incompatível, acesso negado ou processo inacessível, o painel mostra **Indisponível**. Jogos minimizados, pausados, launchers sem renderização, APIs/anticheats/ambientes sem eventos compatíveis podem não fornecer leitura. Não há contorno dessas restrições. Prefira o contador oficial do jogo quando a fonte externa não estiver disponível.
+
+Apenas o coletor particular, iniciado pelo próprio aplicativo a partir do binário verificado, pode ter encerramento de emergência se não responder ao pedido de parada da sessão. Esse controle usa seu handle próprio; nunca encerra o jogo, launchers ou um PresentMon iniciado por outro programa. Saídas de erro são registradas no log local. Dados de frame são lidos pelo pipe e agregados em memória, sem gravar um histórico completo dos quadros no disco.
+
+Origem, licença e hash ficam em `vendor/PresentMon`. Consulte os requisitos do fornecedor em https://github.com/GameTechDev/PresentMon/blob/v2.3.0/README.md .
+
 ## Monitoramento e medições
 
 - **CPU:** `psutil.cpu_percent`; por processo, utilização normalizada pelo número de CPUs lógicas. A primeira amostra precisa de aquecimento.
@@ -83,7 +100,7 @@ A restauração automática não substitui um plano escolhido posteriormente for
 - **GPU:** NVIDIA por `nvidia-smi`, quando disponível. Caso contrário, contadores oficiais WDDM via `Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine`, para drivers compatíveis AMD/Intel/NVIDIA. Soma processos do mesmo motor e exibe o motor mais ocupado; não soma percentuais de motores diferentes. Essa fonte não fornece temperatura.
 - **Temperaturas:** NVIDIA quando fornecida pelo driver e CPU quando `psutil` disponibiliza sensor confiável. No Windows, CPU frequentemente fica indisponível. Não se inventam leituras de WMI/ACPI para preencher os campos.
 - GPU é consultada em segundo plano a cada cinco segundos, sem travar o monitor de CPU/RAM; amostras vencidas são descartadas. Hardware, permissões ou drivers sem fonte resultam em **Indisponível**.
-- CPU/RAM/GPU elevadas são observações, não diagnóstico comprovado de gargalo. **FPS não é exibido**: não há integração homologada com ferramenta de captura de frames.
+- CPU/RAM/GPU elevadas são observações, não diagnóstico comprovado de gargalo. **FPS é exibido somente com quadros reais do PresentMon**, conforme a seção acima; indisponibilidade não é substituída por uma estimativa.
 
 ## Preferências, relatórios e inicialização
 

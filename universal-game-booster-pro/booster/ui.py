@@ -17,6 +17,7 @@ from .safety import assess, choose, ProcessRow
 from .monitor import Monitor, Metrics, metrics
 from .windows import IS_WINDOWS, PowerPlan, Signatures, request_close, configure_startup
 from .games import discover
+from .fps import FpsCapture, GAME_NAME, trace_allowed, reopen_elevated
 
 STYLE = """
 QWidget { background:#0a0e1a; color:#e7edff; font-family:'Segoe UI'; font-size:12px; }
@@ -119,16 +120,22 @@ class MainWindow(QMainWindow):
         self.current_user=psutil.Process().username(); self.active_games=set(); self.offered=set(); self.restore_games=set(); self._allow_pending_exit=False
         self.profile_name=self.store.data.get("profile","Global")
         self.store.profile(self.profile_name)
-        self.monitor=None
+        self.monitor=None; self.fps_capture=None; self.fps_error=""; self._closing_after_fps=False
         root=QWidget(); self.setCentralWidget(root); layout=QVBoxLayout(root); layout.setContentsMargins(24,20,24,20)
         title=QLabel("UNIVERSAL GAME BOOSTER PRO"); title.setObjectName("title"); layout.addWidget(title)
         subtitle=QLabel("Recursos reais. Escolhas suas. Segurança preservada."); subtitle.setObjectName("muted"); layout.addWidget(subtitle)
         cards=QHBoxLayout(); self.cards={}
-        for key in ("CPU","GPU","RAM","DISCO","PROCESSOS"):
+        for key in ("CPU","GPU","RAM","DISCO","PROCESSOS","FPS"):
             label=QLabel(key+"\nAguardando leitura"); label.setObjectName("card"); cards.addWidget(label); self.cards[key]=label
+        self.cards["FPS"].setText("FPS\nDesativado")
         layout.addLayout(cards); self.chart=Chart(); layout.addWidget(self.chart)
-        self.diagnosis=QLabel("FPS: sem integração de medição • Temperaturas somente quando o hardware disponibiliza sensores.")
+        self.diagnosis=QLabel("FPS via PresentMon/ETW • Temperaturas somente quando o hardware disponibiliza sensores.")
         self.diagnosis.setWordWrap(True); layout.addWidget(self.diagnosis)
+        fpsbar=QHBoxLayout();fpsbar.addWidget(QLabel("Jogo para FPS:"));self.fps_targets=QComboBox();self.fps_targets.setMinimumWidth(240);fpsbar.addWidget(self.fps_targets,1)
+        self.fps_start=button("Mostrar FPS",self.start_fps,fpsbar);self.fps_start.setEnabled(IS_WINDOWS)
+        self.fps_stop=button("Parar FPS",self.stop_fps,fpsbar);self.fps_stop.setEnabled(False);layout.addLayout(fpsbar)
+        self.fps_detail=QLabel("Escolha o processo gráfico de um jogo aberto. Fonte: PresentMon • não injeta código no jogo.")
+        self.fps_detail.setWordWrap(True);layout.addWidget(self.fps_detail)
         controls=QHBoxLayout(); self.simulation=QCheckBox("Modo de simulação"); self.simulation.setChecked(self.store.data["simulation"])
         self.simulation.toggled.connect(self.save_flags); controls.addWidget(self.simulation)
         self.power_option=QCheckBox("Alto Desempenho temporário (opcional)"); self.power_option.setEnabled(IS_WINDOWS); controls.addWidget(self.power_option)
@@ -150,6 +157,57 @@ class MainWindow(QMainWindow):
             self.monitor=Monitor(self.store.log); self.monitor.sample.connect(self.on_sample); self.monitor.failed.connect(self.error); self.monitor.start()
         if self.store.load_warning: self.notify(self.store.load_warning)
         if self.store.data.get("power_restore"): self.notify("Há um plano de energia salvo de uma sessão anterior. Use Restaurar ajustes para recuperá-lo.")
+
+    def refresh_fps_targets(self):
+        if self.fps_capture:return
+        previous=self.fps_targets.currentData()
+        old_pid=previous.pid if previous else None
+        self.fps_targets.blockSignals(True);self.fps_targets.clear()
+        for row in self.rows:
+            if row.created and row.exe and (canonical(row.exe) in self.game_paths() or GAME_NAME.fullmatch(row.name)):
+                self.fps_targets.addItem(f"{row.name} • PID {row.pid}",row)
+                if row.pid==old_pid:self.fps_targets.setCurrentIndex(self.fps_targets.count()-1)
+        if self.fps_targets.count() and self.fps_targets.currentIndex()<0:self.fps_targets.setCurrentIndex(0)
+        self.fps_targets.blockSignals(False)
+        if not self.fps_targets.count():self.fps_targets.setPlaceholderText("Abra um jogo; cadastre outros executáveis em MEUS JOGOS")
+
+    def start_fps(self):
+        if self.busy or self.fps_capture:return
+        row=self.fps_targets.currentData()
+        if not row:self.notify("Abra um jogo e selecione seu processo gráfico. Para outros jogos, adicione o executável em MEUS JOGOS.");return
+        if not trace_allowed():
+            if self.store.data.get("power_restore"):
+                self.notify("Restaure primeiro os ajustes temporários antes de reabrir o aplicativo com permissão de FPS.");return
+            response=QMessageBox.question(self,"Permissão para medir FPS","O PresentMon precisa de permissão ETW. Reabrir este aplicativo como administrador? O Windows solicitará sua autorização. Depois de reabrir, escolha o jogo e clique em Mostrar FPS novamente. Nenhuma configuração de segurança será alterada.",QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,QMessageBox.StandardButton.No)
+            if response==QMessageBox.StandardButton.Yes:
+                try:self.store.save();reopen_elevated();self.close()
+                except Exception as exc:self.error(str(exc))
+            return
+        self.fps_error="";capture=FpsCapture(row,self.store.log);self.fps_capture=capture
+        self.fps_targets.setEnabled(False);self.fps_start.setEnabled(False);self.fps_stop.setEnabled(True)
+        self.cards["FPS"].setText("FPS\nColetando…");self.fps_detail.setText(f"PresentMon • {row.name} • PID {row.pid} • aguardando quadros reais")
+        capture.updated.connect(self.fps_updated);capture.failed.connect(self.fps_failed)
+        capture.finished.connect(self.fps_finished);capture.start()
+
+    def fps_updated(self,sample):
+        if sample.fps is None:
+            self.cards["FPS"].setText("FPS\nIndisponível")
+            self.fps_detail.setText(self.fps_error or sample.message)
+        else:
+            self.cards["FPS"].setText(f"FPS\n{sample.fps:.1f}")
+            self.fps_detail.setText(f"{sample.message} • {sample.frame_ms:.2f} ms/quadro • {sample.frames} intervalos • PID {self.fps_capture.target.pid if self.fps_capture else '—'}")
+    def fps_failed(self,message):
+        self.fps_error=message;self.fps_detail.setText(message);self.error("FPS indisponível: "+message)
+    def fps_finished(self):
+        capture=self.fps_capture;self.fps_capture=None
+        self.fps_stop.setEnabled(False);self.fps_targets.setEnabled(True);self.fps_start.setEnabled(IS_WINDOWS and not self.busy)
+        if not self.fps_error:self.cards["FPS"].setText("FPS\nDesativado")
+        if capture:capture.deleteLater()
+        self.refresh_fps_targets()
+        if self._closing_after_fps:QTimer.singleShot(0,self.close)
+    def stop_fps(self):
+        if self.fps_capture:
+            self.fps_capture.requestInterruption();self.fps_stop.setEnabled(False);self.fps_detail.setText("Parando somente o coletor de FPS; o jogo continuará aberto…")
 
     def make_apps(self):
         page=QWidget(); layout=QVBoxLayout(page); bar=QHBoxLayout()
@@ -227,7 +285,8 @@ class MainWindow(QMainWindow):
         notes.append("Essas leituras isoladas não comprovam gargalo nem ganho de FPS")
         notes.append("CPU °C: "+(f"{snapshot.cpu_temp:.0f}" if snapshot.cpu_temp is not None else "indisponível"))
         notes.append("GPU °C: "+(f"{snapshot.gpu_temp:.0f}" if snapshot.gpu_temp is not None else "indisponível"))
-        self.diagnosis.setText(" • ".join(notes)+" • FPS: sem integração")
+        self.diagnosis.setText(" • ".join(notes))
+        self.refresh_fps_targets()
         # Do not replace rows while the user is clicking/choosing cells.
         if QApplication.mouseButtons()==Qt.MouseButton.NoButton and not self.busy:self.render_apps()
         previous=self.active_games; self.active_games={canonical(r.exe) for r in rows if canonical(r.exe) in self.game_paths()}
@@ -294,10 +353,10 @@ class MainWindow(QMainWindow):
 
     def run_job(self,function,done,on_error=None):
         if self.busy:return
-        self.busy=True; self.tabs.setEnabled(False); self.profile.setEnabled(False); self.simulation.setEnabled(False); self.game_boost.setEnabled(False); self.power_option.setEnabled(False); self.boost.setEnabled(False); self.close_button.setEnabled(False); self.safe_button.setEnabled(False)
+        self.busy=True; self.fps_start.setEnabled(False); self.tabs.setEnabled(False); self.profile.setEnabled(False); self.simulation.setEnabled(False); self.game_boost.setEnabled(False); self.power_option.setEnabled(False); self.boost.setEnabled(False); self.close_button.setEnabled(False); self.safe_button.setEnabled(False)
         job=Job(function); self.jobs.append(job)
         def finish(result=None,error=None):
-            self.busy=False; self.tabs.setEnabled(True); self.profile.setEnabled(True); self.simulation.setEnabled(True); self.game_boost.setEnabled(True); self.power_option.setEnabled(IS_WINDOWS); self.boost.setEnabled(True); self.close_button.setEnabled(True); self.safe_button.setEnabled(True)
+            self.busy=False; self.fps_start.setEnabled(IS_WINDOWS and self.fps_capture is None); self.tabs.setEnabled(True); self.profile.setEnabled(True); self.simulation.setEnabled(True); self.game_boost.setEnabled(True); self.power_option.setEnabled(IS_WINDOWS); self.boost.setEnabled(True); self.close_button.setEnabled(True); self.safe_button.setEnabled(True)
             if error:
                 self.error(error)
                 if on_error:on_error(error)
@@ -425,6 +484,8 @@ class MainWindow(QMainWindow):
         if hasattr(self,"tray") and self.tray.isVisible():self.tray.showMessage("Universal Game Booster Pro",message,QSystemTrayIcon.MessageIcon.Information,5000)
     def closeEvent(self,event):
         if self.busy or any(job.isRunning() for job in self.jobs):self.notify("Aguarde a operação atual terminar antes de fechar.");event.ignore();return
+        if self.fps_capture:
+            self._closing_after_fps=True;self.stop_fps();event.ignore();return
         if self.store.data.get("power_restore") and not self._allow_pending_exit:
             event.ignore()
             def finish(result):self.notify(result);QTimer.singleShot(100,self.close)

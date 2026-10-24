@@ -31,13 +31,31 @@ jobs:
       - run: python -m unittest discover -s tests -v
         env:
           QT_QPA_PLATFORM: offscreen
-      - run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name UniversalGameBoosterPro main.py
+      - name: Verify pinned PresentMon
+        run: python -c "from booster.fps import collector_path, verify_collector; verify_collector(collector_path())"
+      - name: Build bounded graphics fixture
+        shell: cmd
+        run: tests\build-fps-fixture.cmd
+      - name: Validate real presentation FPS and keep game running
+        shell: pwsh
+        run: |
+          try {
+            python tests/fps_windows_smoke.py
+            if ($LASTEXITCODE -ne 0) { throw 'Real PresentMon frame capture check failed' }
+          } catch {
+            $message = $_.Exception.Message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=FPS validation::$message"
+            throw
+          }
+      - run: python -m PyInstaller --noconfirm --clean --onedir --windowed --name UniversalGameBoosterPro --add-binary "vendor/PresentMon/PresentMon.exe;vendor/PresentMon" --add-data "vendor/PresentMon/LICENSE.txt;vendor/PresentMon" --add-data "vendor/PresentMon/ORIGIN.json;vendor/PresentMon" main.py
       - name: Verify bundled Python runtime
         shell: pwsh
         run: |
           if (!(Test-Path 'dist/UniversalGameBoosterPro/UniversalGameBoosterPro.exe')) { throw 'Executable missing' }
           if (!(Get-ChildItem 'dist/UniversalGameBoosterPro' -Filter 'python3*.dll' -Recurse)) { throw 'Bundled Python runtime missing' }
           if (!(Get-ChildItem 'dist/UniversalGameBoosterPro' -Filter 'Qt6Widgets.dll' -Recurse)) { throw 'Bundled Qt runtime missing' }
+          $presentMon = 'dist/UniversalGameBoosterPro/_internal/vendor/PresentMon/PresentMon.exe'
+          if ((Get-FileHash $presentMon -Algorithm SHA256).Hash.ToLowerInvariant() -ne '690533cf5c2591ef571a3037aa4c205c8e75860ef3f56927bf3a98acf7198485') { throw 'Bundled PresentMon integrity mismatch' }
       - name: Build Windows installer
         shell: pwsh
         run: |

@@ -7,7 +7,7 @@ if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 ".venv\Scripts\python.exe" -m unittest discover -s tests -v
 if errorlevel 1 exit /b 1
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --onedir --windowed --name UniversalGameBoosterPro main.py
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --onedir --windowed --name UniversalGameBoosterPro --add-binary "vendor/PresentMon/PresentMon.exe;vendor/PresentMon" --add-data "vendor/PresentMon/LICENSE.txt;vendor/PresentMon" --add-data "vendor/PresentMon/ORIGIN.json;vendor/PresentMon" main.py
 if errorlevel 1 exit /b 1
 echo Executavel criado em dist\UniversalGameBoosterPro\UniversalGameBoosterPro.exe
 if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" (
