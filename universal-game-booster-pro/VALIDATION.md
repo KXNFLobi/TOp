@@ -31,3 +31,10 @@ O instalador Inno Setup e o workflow atualizado adicionam verificação dos runt
 A suíte acrescenta validações de PID, separação de swapchains, média ponderada dos intervalos de apresentação, expiração de leitura, rejeição de métricas inválidas, integridade do binário oficial e encerramento restrito ao handle do coletor particular. A interface é testada para não manter um FPS antigo quando a fonte deixa de fornecer quadros.
 
 O workflow Windows agora compila uma aplicação gráfica Direct3D11 WARP de teste, com duração limitada a 15 segundos, captura eventos ETW reais com PresentMon e exige FPS positivo com pelo menos dez intervalos. Depois de parar a captura, exige que a aplicação gráfica continue aberta e aguarda sua saída natural. O instalador só é publicado se esse teste e os testes de instalação/interface/desinstalação passarem. A execução deste novo teste ainda deve ser confirmada no GitHub; compatibilidade de cada jogo/anticheat real continua dependente do ambiente.
+
+
+### Resultado confirmado do FPS no Windows
+
+Execução concluída com sucesso: https://github.com/KXNFLobi/TOp/actions/runs/40137161333 . Os 46 testes passaram no Windows, o binário PresentMon teve integridade conferida, a aplicação Direct3D11 de teste produziu FPS real e pelo menos dez intervalos, e continuou aberta depois da parada do coletor. O bundle e o instalador passaram pela verificação de dependências, instalação, abertura da interface, fechamento normal e desinstalação. O instalador correspondente foi publicado com arquivo BUILD apontando para o commit de origem `c89d08e`.
+
+Esses resultados não comprovam compatibilidade com todo jogo ou anticheat; ausência de eventos/permissões continua resultando em leitura indisponível, sem estimativa por CPU/GPU.

@@ -29,3 +29,8 @@ O modo de simulação vem ligado e os processos desconhecidos ficam protegidos. 
 Use **UniversalGameBoosterPro-Setup.exe** após a conclusão do workflow Windows. O instalador contém os runtimes e instala o aplicativo para o usuário atual. O ZIP `Universal-Game-Booster-Pro-source.zip` é para desenvolvimento, não para entregar a clientes.
 
 A publicação automática do Setup só ocorre depois de compilar, verificar os runtimes e testar instalação, abertura, fechamento normal e desinstalação em Windows. Confira o arquivo `UniversalGameBoosterPro-Setup-BUILD.txt` para o commit de origem e o SHA-256 no arquivo correspondente.
+
+
+### FPS no painel — Game Booster Pro 1.1.0
+
+O Setup atualizado inclui PresentMon. Abra o jogo, selecione seu processo em **Jogo para FPS** e clique em **Mostrar FPS**. A leitura ETW pode exigir reabrir como administrador mediante autorização do Windows. **Parar FPS** encerra somente o coletor particular; não fecha o jogo. O valor é FPS de apresentação, não uma estimativa de CPU/GPU. A captura e a preservação da aplicação gráfica durante a parada foram verificadas no runner Windows.
