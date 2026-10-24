@@ -22,6 +22,13 @@ try
     var log = Path.Combine(root, "audit.log"); File.WriteAllText(log, "audit fixture"); engine.Catalog.Files["audit.log"] = Digest(log);
     try { await engine.Execute(Plan(log), null, CancellationToken.None); throw new Exception("Audit removed"); } catch (InvalidOperationException) { }
     Check(File.Exists(log), "audit preserved even with known hash");
+    engine.Catalog = null;
+    var portable = Path.Combine(root, "portable.bin");File.WriteAllText(portable,"recognized fixture");
+    var info = new FileInfo(portable);
+    engine.RecognizedTarget = ConfirmedTarget.FromRecognition(new(portable,info.Length,info.LastWriteTimeUtc));
+    var portableCopy = Path.Combine(root,"different-name.bin");File.Copy(portable,portableCopy);
+    await engine.Execute(Plan(portableCopy),null,CancellationToken.None);
+    Check(!File.Exists(portableCopy)&&File.Exists(portable),"explicitly recognized hash removes only the separately selected identical copy");
     Check(File.ReadLines(engine.ReportPath).Count() >= 5, "operations recorded on disk");
     Console.WriteLine($"{passed} Windows checks passed; report: {engine.ReportPath}"); return 0;
 }

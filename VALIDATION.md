@@ -29,3 +29,11 @@ A geração do executável não certifica essas integrações. A distribuição 
 ## Atualização visual 1.0.1
 
 Templates escuros explícitos adicionados ao ComboBox, itens e barra de rolagem da lista de programas. Publicação cruzada Windows x64 autocontida concluída sem erros ou avisos. A alteração é visual; os 30 testes registrados acima correspondem à lógica de segurança, que não foi alterada. A aparência atualizada ainda requer conferência no Windows.
+
+## Atualização de busca 1.1.0
+
+- Busca somente de leitura por nome/pasta nas unidades locais fixas, com relatório de exclusões, acessos indisponíveis e candidatos omitidos.
+- Janela de reconhecimento explícito e análise de cópias byte a byte idênticas por SHA-256; nenhum arquivo é autorizado apenas por nome.
+- A suíte agora inclui 45 verificações, cobrindo descoberta em Downloads sem informar o caminho, busca em mais de uma raiz, exclusão de auditoria, candidato falso de mesmo tamanho, confirmação de amostra, cópia renomeada, modificação posterior, cancelamento e limite explícito de candidatos.
+- Os testes Windows incluem a remoção separadamente autorizada de uma cópia da amostra reconhecida; sua execução ainda exige Windows.
+- Renderização das novas telas, enumeração real das unidades Windows e integrações de remoção ainda exigem validação em VM Windows. Não foi feita varredura no computador do usuário nesta sessão.

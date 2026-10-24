@@ -45,6 +45,46 @@ try
     Check(ProcessPolicy.IsGame("FiveM"), "FiveM main process detected");
     Check(!ProcessPolicy.IsGame("FiveM Deep Clean Manager"), "manager never mistaken for game");
     Check(!ProcessPolicy.IsGame("NotFiveM"), "unrelated process ignored");
+    var diskA = Path.Combine(root, "diskA"); var diskB = Path.Combine(root, "diskB");
+    Directory.CreateDirectory(Path.Combine(diskA, "Downloads")); Directory.CreateDirectory(diskB);
+    var sample = Path.Combine(diskA, "Downloads", "Loard.exe"); File.WriteAllText(sample, "sample1");
+    var renamed = Path.Combine(diskB, "renamed.bin"); File.Copy(sample, renamed);
+    var impostor = Path.Combine(diskB, "LoardOther.exe"); File.WriteAllText(impostor, "sample2");
+    Directory.CreateDirectory(Path.Combine(diskA, "Loard-folder"));
+    var config = Path.Combine(diskA, "Loard-folder", "settings.json"); File.WriteAllText(config, "config");
+    Directory.CreateDirectory(Path.Combine(diskA, "Logs")); File.WriteAllText(Path.Combine(diskA, "Logs", "loard.exe"), "audit");
+    File.WriteAllText(Path.Combine(diskA, "loard.log"), "audit");
+    var scanner = new ComputerSearch();
+    var search = scanner.Scan(new[] { diskA, diskB, diskA }, "LoArD", CancellationToken.None);
+    Check(search.Roots.Count == 2, "whole search deduplicates roots");
+    Check(search.Candidates.Any(c => c.Path == sample), "Downloads candidate found without providing its path");
+    Check(search.Candidates.Any(c => c.Path == impostor), "name-only impostor is a candidate, not automatically removed");
+    Check(search.Candidates.Any(c => c.Path == config), "matching parent folder discovers nested files");
+    Check(!search.Candidates.Any(c => c.Path.Contains("Logs") || c.Path.EndsWith(".log")), "discovery excludes protected audit areas");
+    Check(File.Exists(sample) && File.ReadAllText(impostor) == "sample2", "discovery never deletes or changes candidates");
+    Check(!search.Candidates.Any(c => c.Path == renamed), "renamed file not falsely discovered by name alone");
+    var recognized = ConfirmedTarget.FromRecognition(search.Candidates.Single(c => c.Path == sample));
+    Check(recognized.Matches(renamed), "recognized sample identifies a renamed byte-identical copy");
+    Check(!recognized.Matches(impostor), "same size and suspicious name never establish content identity");
+    File.WriteAllText(renamed, "changed");
+    Check(!recognized.Matches(renamed), "changed content loses recognized identity");
+    var oldCandidate = search.Candidates.Single(c => c.Path == sample);
+    File.AppendAllText(sample, "modified");
+    bool changedRejected = false;
+    try { ConfirmedTarget.FromRecognition(oldCandidate); } catch(IOException) { changedRejected = true; }
+    Check(changedRejected, "recognition refuses files modified after discovery");
+    bool canceledSearch = false;
+    using (var cancel = new CancellationTokenSource())
+    { cancel.Cancel(); try { scanner.Scan(new[] { diskA }, "loard", cancel.Token); } catch(OperationCanceledException) { canceledSearch = true; } }
+    Check(canceledSearch, "whole computer discovery honors cancellation");
+    bool queryRejected = false;
+    try { scanner.Scan(new[] { diskA }, "*", CancellationToken.None); } catch(ArgumentException) { queryRejected = true; }
+    Check(queryRejected, "empty/broad wildcard search rejected");
+    Check(scanner.Scan(new[] { Path.Combine(root, "missing") }, "loard", CancellationToken.None).Inaccessible == 1, "missing scan root reported as incomplete coverage");
+    var many = Path.Combine(root, "many"); Directory.CreateDirectory(many);
+    for(int i = 0; i < ComputerSearch.CandidateLimit + 1; i++) File.WriteAllText(Path.Combine(many, $"loard-{i}.bin"), "x");
+    var limited = scanner.Scan(new[]{many}, "loard", CancellationToken.None);
+    Check(limited.Candidates.Count == ComputerSearch.CandidateLimit && limited.OmittedCandidates == 1, "candidate limit is explicit while traversal continues");
     Console.WriteLine($"{count} safety checks passed");
 }
 finally { Directory.Delete(root, true); }

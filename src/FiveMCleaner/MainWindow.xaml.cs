@@ -18,10 +18,11 @@ public partial class MainWindow : Window
     private string analyzedExtra = "";
     private bool analyzedCache;
     private bool busy;
+    private IReadOnlyList<string>? analyzedComputerRoots;
     public MainWindow() { InitializeComponent(); Closing += OnClosing; }
     private void OnClosing(object? sender, CancelEventArgs e) { if (busy) { e.Cancel = true; MessageBox.Show("Use Cancelar e aguarde a operação atual terminar. Desinstaladores oficiais precisam concluir sua transação."); } }
     private void SetProgress(int percent, string text) { Dispatcher.Invoke(() => { var previous = Progress.Value; Progress.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, null); Progress.Value = percent; Progress.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, new DoubleAnimation(previous, percent, TimeSpan.FromMilliseconds(250)) { FillBehavior = FillBehavior.Stop }); Percent.Text = percent + "%"; Status.Text = text; }); }
-    private void Busy(bool value) { busy = value; Workspace.IsEnabled = true; Programs.IsEnabled = !value; AnalyzeButton.IsEnabled = !value; ExtraFolder.IsEnabled = !value; CacheOption.IsEnabled = !value; CancelButton.IsEnabled = value; CleanButton.IsEnabled = !value && rows.Count > 0; }
+    private void Busy(bool value) { busy = value; FullScanButton.IsEnabled = !value; SearchName.IsEnabled = !value; Workspace.IsEnabled = true; Programs.IsEnabled = !value; AnalyzeButton.IsEnabled = !value; ExtraFolder.IsEnabled = !value; CacheOption.IsEnabled = !value; CancelButton.IsEnabled = value; CleanButton.IsEnabled = !value && rows.Count > 0; }
     private async void Continue_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -49,10 +50,11 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) { ShowError(ex); }
     }
-    private void InvalidateAnalysis() { rows.Clear(); Findings.ItemsSource = rows; CleanButton.IsEnabled = false; SetProgress(0, "Configuração alterada: analise novamente."); }
+    private void InvalidateAnalysis() { engine.RecognizedTarget = null; analyzedComputerRoots = null; rows.Clear(); Findings.ItemsSource = rows; CleanButton.IsEnabled = false; SetProgress(0, "Configuração alterada: analise novamente."); }
     private async void Analyze_Click(object sender, RoutedEventArgs e)
     {
         if (busy) return;
+        engine.RecognizedTarget = null; analyzedComputerRoots = null;
         analyzedProgram = Programs.SelectedItem as InstalledProgram; analyzedCatalog = engine.Catalog; analyzedExtra = ExtraFolder.Text; analyzedCache = CacheOption.IsChecked == true;
         if (analyzedProgram == null && analyzedCatalog == null && !analyzedCache) { MessageBox.Show("Selecione um programa, carregue um catálogo conhecido ou habilite a manutenção de cache."); return; }
         if (analyzedProgram != null && analyzedCatalog != null && !analyzedProgram.Name.Equals(analyzedCatalog.Program, StringComparison.OrdinalIgnoreCase)) { MessageBox.Show("O campo Program do catálogo deve corresponder exatamente ao programa selecionado."); return; }
@@ -69,6 +71,47 @@ public partial class MainWindow : Window
         catch (OperationCanceledException) { SetProgress(0, "Análise cancelada; nenhuma remoção realizada."); }
         catch (Exception ex) { ShowError(ex); }
         finally { cancellation?.Dispose(); cancellation = null; Busy(false); }
+    }
+    private async void FullScan_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy) return;
+        var query = SearchName.Text.Trim();
+        InvalidateAnalysis(); cancellation = new(); Busy(true); Progress.IsIndeterminate = true;
+        try
+        {
+            CleanEngine.CheckGames();
+            SetProgress(10, "Procurando arquivos e pastas nas unidades locais…");
+            var updates = new Progress<ScanUpdate>(update => { if (busy) Status.Text = $"{update.Files:N0} arquivos vistos • {update.CurrentPath}"; });
+            var roots = await Task.Run(() => ComputerSearch.LocalRoots(engine.Log));
+            if (roots.Count == 0) throw new IOException("Nenhuma unidade local pronta para pesquisar.");
+            engine.Log("Busca no computador", query, "Somente leitura; não identifica software só pelo nome");
+            var result = await Task.Run(() => new ComputerSearch().Scan(roots, query, cancellation.Token, updates, engine.Log));
+            cancellation.Token.ThrowIfCancellationRequested(); Progress.IsIndeterminate = false;
+            SetProgress(30, $"Busca concluída: {result.Candidates.Count} candidatos. Nenhuma exclusão realizada.");
+            if (result.Candidates.Count == 0)
+            {
+                MessageBox.Show($"Nenhum nome correspondente foi encontrado em {result.Files:N0} arquivos vistos.\nAcessos indisponíveis: {result.Inaccessible}; áreas/arquivos protegidos excluídos: {result.Excluded}.\n\nIsso não comprova ausência do software: ele pode usar outro nome. Consulte o relatório e, se souber, tente o nome real do arquivo.", "Resultado da busca"); return;
+            }
+            var review = new CandidateReviewWindow(result) { Owner = this };
+            if (review.ShowDialog() != true || review.RecognizedFile == null) return;
+            cancellation.Token.ThrowIfCancellationRequested(); Progress.IsIndeterminate = true;
+            SetProgress(35, "Calculando a identidade do arquivo confirmado e procurando cópias idênticas…");
+            var recognized = await Task.Run(() => ConfirmedTarget.FromRecognition(review.RecognizedFile, cancellation.Token));
+            cancellation.Token.ThrowIfCancellationRequested();
+            engine.Log("Reconhecimento explícito", recognized.Path, "Usuário reconheceu o arquivo; SHA-256: " + recognized.Sha256);
+            engine.RecognizedTarget = recognized; engine.Catalog = null;
+            Programs.SelectedIndex = -1; CacheOption.IsChecked = false; ExtraFolder.Text = "";
+            CatalogInfo.Text = "Arquivo reconhecido por você: " + recognized.Path;
+            analyzedProgram = null; analyzedCatalog = null; analyzedCache = false; analyzedExtra = ""; analyzedComputerRoots = result.Roots;
+            var found = await Task.Run(() => engine.Analyze(null, "", false, cancellation.Token, computerRoots: analyzedComputerRoots, progress: updates));
+            rows = new(found); Findings.ItemsSource = rows;
+            Progress.IsIndeterminate = false;
+            SetProgress(45, $"{found.Count} componentes com evidência. Revise e marque somente o que autoriza remover.");
+            MessageBox.Show($"Análise concluída. As cópias identificadas têm conteúdo idêntico ao arquivo que você confirmou; processos, inicialização, tarefas e serviços são relacionados por seus caminhos.\n\nLimitações de acesso: {engine.Warnings.Count}. Arquivos de outras versões, renomeados sem amostra idêntica ou componentes sem evidência podem permanecer. Nenhum histórico ou log de segurança será apagado.\n\nRevise a tabela e confirme separadamente qualquer remoção.", "Revisar componentes");
+        }
+        catch (OperationCanceledException) { engine.Log("Busca cancelada", query, "Nenhuma exclusão realizada"); SetProgress(0, "Busca cancelada. Nenhuma exclusão realizada."); }
+        catch (Exception ex) { ShowError(ex); }
+        finally { Progress.IsIndeterminate = false; cancellation?.Dispose(); cancellation = null; Busy(false); }
     }
     private async void Clean_Click(object sender, RoutedEventArgs e)
     {
@@ -93,13 +136,13 @@ public partial class MainWindow : Window
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex) { failures++; f.Outcome = "Não removido: " + ex.Message; engine.Log("Falha", f.Path, ex.Message); }
             }
-            cancellation.Token.ThrowIfCancellationRequested(); SetProgress(90, "Verificação final: nova busca pelos componentes…");
-            var remaining = await Task.Run(() => engine.Analyze(analyzedProgram, analyzedExtra, analyzedCache, cancellation.Token, true));
+            cancellation.Token.ThrowIfCancellationRequested(); Progress.IsIndeterminate = analyzedComputerRoots != null; SetProgress(90, "Verificação final: nova busca pelos componentes…");
+            var remaining = await Task.Run(() => engine.Analyze(analyzedProgram, analyzedExtra, analyzedCache, cancellation.Token, true, analyzedComputerRoots));
             var residuals = remaining.Where(f => f.Kind != "Desinstalador").ToList();
             foreach (var f in residuals) engine.Log("Residual", f.Path, f.Evidence);
             foreach (var f in remaining.Where(f => f.Kind == "Desinstalador")) engine.Log("Registro de instalação ainda presente", f.Path, f.Evidence);
             bool incomplete = failures > 0 || remaining.Count > 0 || engine.Warnings.Count > 0;
-            complete = true; SetProgress(100, incomplete ? "Limpeza concluída com pendências — consulte o relatório." : "Limpeza concluída");
+            complete = true; Progress.IsIndeterminate = false; SetProgress(100, incomplete ? "Limpeza concluída com pendências — consulte o relatório." : "Limpeza concluída");
             using (var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager")) if (key?.GetValue("PendingFileRenameOperations") != null) engine.Log("Reinicialização", "Windows", "Há operações pendentes no sistema; podem ser anteriores à sessão.");
             engine.Log("Resumo", "Sessão", $"Concluída; falhas {failures}; componentes ainda encontrados {remaining.Count}; limitações {engine.Warnings.Count}; reinicialização {engine.RebootRequired}");
             MessageBox.Show($"Limpeza concluída{(incomplete ? " com pendências" : "")}.\n\nFalhas: {failures}\nComponentes ainda encontrados: {remaining.Count}\nLimitações na verificação: {engine.Warnings.Count}\n{(engine.RebootRequired ? "Reinicie o Windows para concluir remoções de serviços ou instaladores." : "Consulte o relatório para eventuais operações de reinicialização já pendentes no Windows.")}\n\nRelatório: {engine.ReportPath}", "Resultado");
@@ -110,7 +153,7 @@ public partial class MainWindow : Window
         {
             if (canceled) { foreach (var f in selected.Where(f => f.Outcome == "Aguardando")) f.Outcome = "Não executado"; SetProgress((int)Progress.Value, "Limpeza cancelada. Operações já concluídas foram preservadas no relatório."); }
             else if (!complete) SetProgress((int)Progress.Value, "Operação interrompida. Consulte o relatório e analise novamente.");
-            cancellation?.Dispose(); cancellation = null; Busy(false); CleanButton.IsEnabled = false;
+            Progress.IsIndeterminate = false; cancellation?.Dispose(); cancellation = null; Busy(false); CleanButton.IsEnabled = false;
         }
     }
     private void Cancel_Click(object sender, RoutedEventArgs e) { cancellation?.Cancel(); Status.Text = "Cancelamento solicitado; aguardando operação atual. Instaladores não serão interrompidos."; }

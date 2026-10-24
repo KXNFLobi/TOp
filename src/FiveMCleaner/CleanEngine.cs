@@ -17,6 +17,7 @@ public sealed class CleanEngine
     public List<string> Warnings { get; } = [];
     public bool RebootRequired { get; private set; }
     public HashCatalog? Catalog { get; set; }
+    public ConfirmedTarget? RecognizedTarget { get; set; }
     private readonly object logLock = new();
     private readonly HashSet<string> previousOwned = new(StringComparer.OrdinalIgnoreCase);
     private string? signatureRoot;
@@ -72,26 +73,27 @@ public sealed class CleanEngine
         catch (CryptographicException) { return false; }
         finally { Marshal.DestroyStructure<TrustFile>(fp); Marshal.FreeHGlobal(fp); Marshal.FreeHGlobal(dp); Marshal.FreeHGlobal(ap); }
     }
-    private string? Ownership(string path, InstalledProgram? program)
+    private string? Ownership(string path, InstalledProgram? program, CancellationToken token = default)
     {
         if (!File.Exists(path) || PathPolicy.HasLink(path) || PathPolicy.Protected(path)) return null;
+        if (RecognizedTarget?.Matches(path, token) == true) return "Conteúdo confirmado explicitamente pelo usuário; SHA-256: " + RecognizedTarget.Sha256;
         if (Catalog != null && (program == null || Catalog.Program.Equals(program.Name, StringComparison.OrdinalIgnoreCase)) && Catalog.Files.TryGetValue(System.IO.Path.GetFileName(path), out var expected) && Hash(path).Equals(expected, StringComparison.OrdinalIgnoreCase)) return "SHA-256: " + expected;
         if (program != null && signatureRoot == program.Location && PathPolicy.DedicatedRoot(program.Location) && PathPolicy.Within(path, program.Location) && new[] { ".exe", ".dll" }.Contains(System.IO.Path.GetExtension(path), StringComparer.OrdinalIgnoreCase) && TrustedPublisher(path, program.Publisher)) return "InstallLocation + assinatura Authenticode válida: " + program.Publisher;
         return null;
     }
     private void Warn(string target, Exception ex) { var message = target + ": " + ex.Message; Warnings.Add(message); Log("Limitação", target, ex.Message); }
-    private IEnumerable<string> Walk(string root, CancellationToken token, bool cache = false)
+    private IEnumerable<string> Walk(string root, CancellationToken token, bool cache = false, long fileLimit = 150000)
     {
-        var stack = new Stack<string>(); stack.Push(root); int visited = 0;
+        var stack = new Stack<string>(); stack.Push(root); long visited = 0;
         while (stack.Count > 0)
         {
-            token.ThrowIfCancellationRequested(); var dir = stack.Pop(); if (PathPolicy.HasLink(dir) || (!cache && PathPolicy.Protected(dir))) continue;
-            string[] files, dirs; try { files = Directory.GetFiles(dir); dirs = Directory.GetDirectories(dir); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Warn(dir, e); continue; }
-            foreach (var file in files) { if (++visited > 150000) { Warnings.Add("Limite de 150.000 arquivos alcançado em " + root); Log("Limitação", root, "Varredura parcial: limite de arquivos"); yield break; } yield return file; }
+            token.ThrowIfCancellationRequested(); var dir = stack.Pop();
+            string[] files, dirs; try { if (PathPolicy.HasLink(dir) || (!cache && PathPolicy.Protected(dir))) continue; files = Directory.GetFiles(dir); dirs = Directory.GetDirectories(dir); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Warn(dir, e); continue; }
+            foreach (var file in files) { if (++visited > fileLimit) { Warnings.Add("Limite de arquivos alcançado em " + root); Log("Limitação", root, "Varredura parcial: limite de arquivos"); yield break; } yield return file; }
             foreach (var child in dirs) stack.Push(child);
         }
     }
-    public async Task<List<Finding>> Analyze(InstalledProgram? program, string extra, bool cache, CancellationToken token, bool finalVerification = false)
+    public async Task<List<Finding>> Analyze(InstalledProgram? program, string extra, bool cache, CancellationToken token, bool finalVerification = false, IReadOnlyList<string>? computerRoots = null, IProgress<ScanUpdate>? progress = null)
     {
         CheckGames(); Warnings.Clear();
         if (!finalVerification)
@@ -108,21 +110,24 @@ public sealed class CleanEngine
         if (program != null && Regex.IsMatch(program.Name, @"(?i)(Grand Theft Auto|GTA\s*V|FiveM|BattlEye|Easy\s*Anti\s*Cheat|Vanguard|Windows)")) throw new InvalidOperationException("Produto protegido: a remoção deste componente não é permitida.");
         var findings = new List<Finding>(); int unverified = 0;var examined=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         Log("Análise", program?.Name ?? "Catálogo/cache", "Iniciada");
-        var roots = new List<string>();
+        var roots = computerRoots?.ToList() ?? new List<string>();
+        long filesScanned = 0;
         if (program != null && PathPolicy.DedicatedRoot(program.Location)) roots.Add(program.Location);
         if (Catalog != null)
         {
             roots.AddRange(new[] { Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), System.IO.Path.GetTempPath(), Environment.GetFolderPath(Environment.SpecialFolder.Startup), Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup) });
             if (Directory.Exists(extra)) roots.Add(extra);
         }
+        foreach (var missing in roots.Where(root => !Directory.Exists(root))) Warn(missing, new IOException("Raiz indisponível; não foi analisada"));
         foreach (var root in roots.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase))
-            foreach (var path in Walk(root, token))
+            foreach (var path in Walk(root, token, fileLimit: computerRoots == null ? 150000 : long.MaxValue))
             {
                 token.ThrowIfCancellationRequested();
-                if (!examined.Add(path)) continue;
+                if (computerRoots == null && !examined.Add(path)) continue;
+                if (++filesScanned % 1000 == 0) progress?.Report(new(filesScanned, root));
                 try
                 {
-                    var evidence = Ownership(path, program); if (evidence != null) findings.Add(new() { Kind = "Arquivo", Path = path, Evidence = evidence, Identity = Hash(path) });
+                    var evidence = Ownership(path, program, token); if (evidence != null) findings.Add(new() { Kind = "Arquivo", Path = path, Evidence = evidence, Identity = RecognizedTarget != null && evidence.StartsWith("Conteúdo confirmado") ? RecognizedTarget.Sha256 : Hash(path) });
                     else if (program != null && !string.IsNullOrWhiteSpace(program.Location) && Directory.Exists(program.Location) && PathPolicy.Within(path, program.Location)) { unverified++; Log("Preservado sem evidência", path, "Não há hash conhecido ou assinatura correspondente suficiente"); }
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException or CryptographicException) { Warn(path, e); }

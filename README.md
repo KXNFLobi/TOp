@@ -2,7 +2,9 @@
 
 Aplicativo de manutenção para **Windows 10/11 x64**, em **C# / .NET 8 / WPF**. Interface em português, tema preto e azul, revisão dos componentes e autorização explícita antes da remoção. O arquivo original `gpo.html` permanece independente e inalterado.
 
-Versão **1.0.1**: seletor de programas, itens, seleção e barra de rolagem da lista usam templates escuros próprios, independentemente do tema claro do Windows.
+Versão **1.1.0**: busca de candidatos em todas as unidades locais fixas acessíveis, com reconhecimento explícito de arquivo e localização de cópias idênticas por SHA-256. O nome inicial sugerido é Loard e pode ser alterado.
+
+Tema escuro desde a versão 1.0.1: seletor de programas, itens, seleção e barra de rolagem da lista usam templates escuros próprios, independentemente do tema claro do Windows.
 
 ## Compilar e gerar o executável
 
@@ -18,6 +20,23 @@ dotnet publish src/FiveMCleaner/FiveMCleaner.csproj -c Release -r win-x64 --self
 Execute `artifacts/win-x64/FiveM Deep Clean Manager.exe`. A publicação autocontida inclui o runtime; o usuário final não precisa instalar .NET. O manifesto solicita elevação via UAC. O executável gerado não possui assinatura de distribuição: para uma distribuição pública, assine-o com certificado de assinatura de código da sua organização. O aplicativo não instala serviço próprio.
 
 Também é possível compilar e publicar para Windows a partir do Linux graças a `EnableWindowsTargeting`. **WPF, UAC, Registro, Authenticode, restauração e operações de remoção só podem ser executados e validados no Windows.** O workflow GitHub Actions compila nas duas plataformas e executa os testes de integração somente no Windows. O workflow foi adicionado; sua execução no GitHub depende de publicar o código no repositório.
+
+## Procurar o Loard sem saber a pasta
+
+1. Feche GTA V e FiveM. Clique em **Continuar** e depois em **Buscar no PC inteiro**. O nome sugerido é `Loard`; troque-o se souber outro nome usado pelo arquivo.
+2. A busca percorre as unidades locais fixas prontas, incluindo Downloads e perfis acessíveis. Usa nomes de arquivos e pastas como pistas, sem executar os arquivos e sem autorizar exclusões por nome.
+3. Revise os candidatos na janela que aparecer. Confira caminho, tamanho e data. Escolha **somente um arquivo que você reconheça** como pertencente ao software e marque a declaração de reconhecimento. Se não reconhecer nenhum, volte sem autorizar.
+4. Clique em **Confirmar arquivo e analisar cópias**. O aplicativo calcula o SHA-256 da amostra confirmada e faz uma segunda varredura para encontrar conteúdo idêntico, incluindo cópias com outros nomes. Arquivos de mesmo tamanho mas conteúdo diferente não são autorizados por essa evidência.
+5. Na tela principal, revise arquivos e componentes relacionados por caminho (processos, Run/RunOnce, serviços de processo próprio e tarefas de ação única). Marque cada operação e confirme a remoção. As confirmações e revalidações existentes continuam obrigatórias.
+6. Depois da remoção, uma nova busca nas mesmas raízes verifica cópias e referências identificáveis restantes. O relatório preserva as operações, limitações e resíduos.
+
+Não é necessário informar o caminho antes da busca. Porém, **não existe identificação universal do Loard pelo nome**: se o arquivo e todas as pastas tiverem outros nomes, a primeira busca pode não encontrá-lo. Depois de reconhecer uma amostra, somente cópias de conteúdo idêntico são identificadas por esse hash; outras versões, configurações e componentes de conteúdo diferente não são inferidos como pertencentes ao produto.
+
+As buscas podem demorar em discos grandes e mostram um contador de arquivos com barra indeterminada, em vez de uma porcentagem estimada de arquivos desconhecidos. É possível cancelar. A descoberta percorre todas as entradas das raízes elegíveis, sem o limite de 150.000 arquivos aplicado à análise convencional; a janela mostra até 2.000 candidatos e informa quantos candidatos adicionais foram omitidos. Refine o nome e repita quando esse limite for atingido.
+
+Windows, jogos reconhecidos, anticheat, áreas de auditoria/histórico, reparse points e arquivos offline não são pesquisados ou removidos por esse modo. Unidades de rede, removíveis, bloqueadas ou indisponíveis não fazem parte da varredura. Áreas inacessíveis e exclusões são relatadas; portanto, "PC inteiro" significa **as áreas elegíveis e acessíveis das unidades locais fixas**, sem contornar permissões. Referências de inicialização são verificadas no usuário elevado atual e no computador, não nos hives de todos os outros usuários.
+
+A busca não examina o conteúdo interno de arquivos compactados, não modifica anticheat e não apaga registros de execução, logs de segurança, Prefetch, Amcache ou USN. Escolher uma amostra não autoriza apagar uma pasta inteira nem todos os arquivos que contenham o mesmo nome.
 
 ## Usar
 
@@ -90,6 +109,8 @@ src/FiveMCleaner/
   CleanEngine.cs            Análise, evidências, remoção e auditoria
   PathPolicy.cs             Escopo e bloqueios de caminhos
   ProcessPolicy.cs          Identificação dos processos do jogo
+  ComputerSearch.cs         Descoberta nas unidades e identidade da amostra
+  CandidateReviewWindow.*   Revisão e reconhecimento explícito do candidato
   Models.cs                 Modelos de instalação, componentes e relatório
   app.manifest              Elevação UAC e compatibilidade Windows
  tests/SafetyChecks/         Testes executáveis de políticas de caminhos
